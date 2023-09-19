@@ -100,162 +100,133 @@ int main(void)
  */
 static void run_cmds(Command *cmd_list)
 {
-  execute_command(cmd_list);
-}
-static void execute_command(Command *cmd_list)
+  //print_cmd(cmd_list);
+  int runpipe[2];//used for pipe both(used for firrst parent and child process)
+  int runpipe2[2];//ueed for the second pipe
+  int newfd;
+  int pid;
+  int pid2;
+if(cmd_list->pgm->next==NULL)//End command
 {
-    if((cmd_list->rstdout)!=NULL)//output redirection
-    {
-      file_name = cmd_list->rstdout;
-       redirection = 1;
-      execute_pgm(cmd_list->pgm);
-      print_cmd(cmd_list);
-    }
-    else if((cmd_list->rstdin)!=NULL)//input redirection
-    {
-       redirection = -1;
-      execute_pgm(cmd_list->pgm);
-      print_cmd(cmd_list);
-    }
-    else//no redirection
-    {
-       redirection = 0;//no redirection
-      execute_pgm(cmd_list->pgm);
-      print_cmd(cmd_list);
-    }
-   
-}//static int redirection is respectively 1,-1,0 output_redirection,input_redirection,no redirection
-static void execute_pgm(Pgm *p)
-{
-    if(p==NULL){return;}//end of the pointer structure
+  if((pid=fork())==-1)
+  {
+    printf("Fork() failed.");
+  }
+  if(pid==0)
+  {
+    execvp(cmd_list->pgm->pgmlist[0],&cmd_list->pgm->pgmlist[0]);
+    //exit(0);
+  }
   else
   {
-    char **pl = p->pgmlist; 
-    execute_pgm(p->next);
-    while(*pl)
-    {
-      if(strcmp(*pl,"ls")==0)
-      {
-        cmd_ls();
-        *pl++;
-      }
-      else if(strcmp(*pl,"date")==0)//simplily date command
-      {
-          cmd_date();
-          *pl++;
-      }
-      else if(strcmp(*pl,"who")==0)
-      {
-          cmd_who();
-          *pl++;
-      }
-      else
-      {
-        printf("Now none is executed\n");
-        *pl++;
-      }
-    }
+    wait(NULL);
   }
 }
-/*
- * Print a Command structure as returned by parse on stdout.
- *
- * Helper function, no need to change. Might be useful to study as inpsiration.
- */
-static void cmd_ls()
+else if(cmd_list->pgm->next->next ==NULL)//one pipe
 {
-  DIR *pdir = opendir(".");
-  struct dirent *pdirent=NULL;
-  if(pdir==NULL)
+  if(pipe(runpipe)==0)
   {
-    printf("failed\n");
+    printf("Pipe fialed");
   }
-  while((pdirent=readdir(pdir))!=NULL)
+  if((pid=fork())==-1)
   {
-    if(pdirent->d_name[0]=='.')
-    {
-      continue;//omted files hided
-    }
-    //out redirection
-    if(redirection == 0)
-    {
-      printf("%s   ",pdirent->d_name);
-    }
-    else if(redirection ==1)
-    {
-        FILE* pf = fopen(file_name,"a");
-        //printf("%s   ",pdirent->d_name);
-        fprintf(pf,"%s   ",pdirent->d_name);
-        fclose(pf);
-    }
+    printf("Fork() failed.");
   }
-  closedir(pdir);
-  printf("\n");
-}
-static void cmd_date()
-{
-          struct tm *ptr;//tm is structure including all arguments about time showing
-          time_t it;    //long int
-          char str[80]; //where temporary results stored
-          it = time(NULL); //return a long int,which is how many seconds from Jan.1st 1970
-          ptr=localtime(&it); // transfer time to local time
-          strftime(str,sizeof(str),"%a %e %b %X %Y %Z",ptr);//strftime is format function for printf
-          if(redirection ==0)
-          {
-            printf("%s\n",str);
-          }
-          else if(redirection == 1)
-          {
-          FILE* pf = fopen(file_name,"a");
-          fprintf(pf,"%s   ",str);
-          fclose(pf);
-          }
-          //printf("in execute_command: %s\n",*pl);
-}
-static void cmd_who()
-{
-  int ok;
-  ok = mywho();
-}
-static int mywho()
-{
-  struct utmp *um; //utmp include all arguments about messages of users
-  char timebuf[24];
-  int users= 0;//innitial users number 0
-  while(um=getutent())
+  if(pid==0)
   {
-    if(um->ut_type != USER_PROCESS)
+    close(runpipe[0]);
+    if(dup2(runpipe[1],STDOUT_FILENO)==-1)//last process output is assigned to the write of pipe
     {
-      continue;
+      printf("cannot redirect");
     }
-    time_t tm;
-    tm = (time_t)(um->ut_tv.tv_sec);
-    strftime(timebuf,24,"%F %R",localtime(&tm));
-    if(redirection==0)
-    {printf("%-12s%-12s%-20.20s (%s)\n",um->ut_user,um->ut_line,timebuf,um->ut_host);}
-    else if(redirection == 1)
+    close(runpipe[1]);
+    execvp(cmd_list->pgm->next->pgmlist[0],&cmd_list->pgm->next->pgmlist[0]);
+    
+  }
+  else
+  {
+    wait(NULL);
+    close(runpipe[1]);
+        if(dup2(runpipe[0],STDIN_FILENO)==-1)//patent process input assigned to read of the pipe
     {
-          FILE* pf = fopen(file_name,"a");
-          /*char *s1[100];
-          char *s2[100];
-          char *s3[100];
-          char *s4[100];
-          strcpy(s1,um->ut_user);
-          strcpy(s1,um->ut_line);
-          strcpy(s1,timebuf);
-          strcpy(s1,um->ut_host);
-          printf(pf,"%-12s %-12s%-20.20s (%s)\n",s1,s2,s3,s4);
-          */
-          fprintf(pf,"%-12s%-12s%-20.20s (%s)\n",um->ut_user,um->ut_line,timebuf,um->ut_host);
-          fclose(pf);
+      printf("cannot redirect");
     }
+      close(runpipe[0]);
+      execvp(cmd_list->pgm->pgmlist[0],&cmd_list->pgm->pgmlist[0]);
+      
+  }
+}
+//two pipes
+else if(cmd_list->pgm->next->next==NULL)
+{
+  if(pipe(runpipe)==0)
+  {
+    printf("pipe failed");
+  }
+  if((pid=fork())==-1)
+  {
+    printf("Fork() failed.");
+  }
+
+  if(pid==0)//the last child
+  {
+    if(pipe(runpipe2)==0)
+    {
+      printf("pipe failed");
+    }
+    if((pid=fork())==-1)
+    {
+      printf("Fork() failed.");
+    }
+    
+    if(pid==0)//the last child
+    {
+      close(runpipe2[0]);
+      if(dup2(runpipe2[1],STDOUT_FILENO)==-1)
+      {
+        printf("cannot redirect");
+      }
+      close(runpipe2[1]);
+      execvp(cmd_list->pgm->next->next->pgmlist[0],&cmd_list->pgm->next->next->pgmlist[0]);
+      printf("last here");
+    }
+    else//the last child parent and the first child
+    {
+      wait(NULL);
+      close(runpipe2[1]);
+      if(dup2(runpipe2[0],STDIN_FILENO)==-1)
+      {
+        printf("cannot redirect");
+      }
+      close(runpipe2[0]);
+      close(runpipe[0]);
+      if(dup2(runpipe[1],STDOUT_FILENO)==-1)
+      {
+        printf("cannot redirect");
+      }
+      close(runpipe[1]);
+      execvp(cmd_list->pgm->next->pgmlist[0],&cmd_list->pgm->next->pgmlist[0]);
+    }
+    
 
   }
-  endutent();
-  return 0;
-
+  else//first parent process
+  {
+    wait(NULL);
+    wait(NULL);
+    close(runpipe[1]);
+        if(dup2(runpipe[0],STDIN_FILENO)==-1)
+    {
+      printf("cannot redirect");
+    }
+      close(runpipe[0]);
+      execvp(cmd_list->pgm->pgmlist[0],&cmd_list->pgm->pgmlist[0]);
+}
 
 }
+}
+
+
 
 static void print_cmd(Command *cmd_list)
 {
